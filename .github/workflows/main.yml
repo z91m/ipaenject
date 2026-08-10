@@ -59,7 +59,7 @@ jobs:
         run: |
           echo "⬇️ Downloading IPA from Google Drive..."
           pip install gdown
-          gdown "${{ github.event.inputs.ipa_url }}" -O original.ipa --fuzzy
+          gdown "${{ github.event.inputs.ipa_url }}" -O original.ipa
           
           file_type=$(file --mime-type -b original.ipa)
           if [[ "$file_type" != "application/x-ios-app" && "$file_type" != "application/zip" ]]; then
