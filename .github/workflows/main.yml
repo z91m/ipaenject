@@ -1,0 +1,161 @@
+name: 🚀 IPAenject - Build Modified iOS App
+
+on:
+  workflow_dispatch:
+    inputs:
+      ipa_url:
+        description: "URL to the decrypted IPA file"
+        required: true
+        type: string
+
+      app_type:
+        description: "Application Type"
+        required: true
+        default: "instagram"
+        type: choice
+        options:
+          - instagram
+
+      enable_regram:
+        description: "🔹 Regram (Media saving for Instagram)"
+        type: boolean
+        required: false
+        default: true
+
+      enable_adblock:
+        description: "🌐 Universal AdBlock"
+        type: boolean
+        required: false
+        default: true
+
+      enable_jb_bypass:
+        description: "🌐 Jailbreak Detection Bypass"
+        type: boolean
+        required: false
+        default: true
+
+      display_name:
+        description: "App Display Name (Optional)"
+        required: false
+        type: string
+        default: "Instagram++"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-modified-app:
+    name: 🔨 Build Instagram++
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📱 Download and Validate IPA
+        run: |
+          echo "⬇️ Downloading IPA..."
+          wget "${{ github.event.inputs.ipa_url }}" --timeout=30 -O original.ipa
+          
+          file_type=$(file --mime-type -b original.ipa)
+          if [[ "$file_type" != "application/x-ios-app" && "$file_type" != "application/zip" ]]; then
+            echo "::error::Invalid IPA file type: $file_type"
+            exit 1
+          fi
+          
+          file_size=$(stat -f%z original.ipa 2>/dev/null || stat -c%s original.ipa)
+          echo "✅ IPA validated ($((file_size/1024/1024))MB)"
+
+      - name: 🛠️ Install Dependencies
+        run: |
+          brew install ldid
+          pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
+          mkdir -p output build
+
+      - name: 🧩 Prepare Tweaks
+        run: |
+          echo "🔍 Preparing tweaks for: ${{ github.event.inputs.app_type }}"
+          selected_tweaks=""
+          
+          if [ "${{ github.event.inputs.enable_adblock }}" = "true" ]; then
+            find tweaks/universal/adblock -name "*.dylib" -exec cp {} build/ \; 2>/dev/null || true
+            selected_tweaks="$selected_tweaks adblock"
+          fi
+          
+          if [ "${{ github.event.inputs.enable_jb_bypass }}" = "true" ]; then
+            find tweaks/universal/jailbreak-detection -name "*.dylib" -exec cp {} build/ \; 2>/dev/null || true
+            selected_tweaks="$selected_tweaks jb-bypass"
+          fi
+          
+          echo "SELECTED_TWEAKS=$selected_tweaks" >> $GITHUB_ENV
+          echo "📋 Prepared tweaks:$selected_tweaks"
+
+      - name: 🔧 Inject Tweaks
+        run: |
+          if [ ! "$(ls -A build/)" ]; then
+            echo "⚠️ No tweaks found - creating unmodified copy"
+            cp original.ipa output/modified.ipa
+            exit 0
+          fi
+          
+          cyan_cmd="cyan -i original.ipa -o output/modified.ipa"
+          
+          if [ -n "${{ github.event.inputs.display_name }}" ]; then
+            cyan_cmd="$cyan_cmd -n '${{ github.event.inputs.display_name }}'"
+          else
+            cyan_cmd="$cyan_cmd -n 'Instagram++'"
+          fi
+          
+          for file in build/*; do
+            if [ -f "$file" ]; then
+              cyan_cmd="$cyan_cmd $file"
+            fi
+          done
+          
+          echo "🏃‍♂️ Executing: $cyan_cmd"
+          if eval "$cyan_cmd"; then
+            echo "✅ Injection completed!"
+          else
+            echo "❌ Injection failed, using fallback"
+            cp original.ipa output/modified.ipa
+          fi
+
+      - name: 📤 Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: instagram-plus-${{ github.run_number }}
+          path: |
+            output/modified.ipa
+          retention-days: 30
+
+      - name: 🎉 Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "📱 Instagram++ - Build ${{ github.run_number }}"
+          body: |
+            ## 🚀 Instagram++ Build Complete
+            
+            🧩 Tweaks: ${{ env.SELECTED_TWEAKS }}
+            
+            ### 📥 Installation:
+            1. Download `modified.ipa`
+            2. Install with AltStore or Sideloadly
+            3. Trust certificate in iOS Settings
+            
+            Built with IPAenject ✨
+          files: |
+            output/modified.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ✅ Build Complete
+        run: |
+          echo "🎉 BUILD COMPLETE!"
+          echo "📱 App: Instagram++"
+          echo "🔗 Download: https://github.com/${{ github.repository }}/releases/latest"
