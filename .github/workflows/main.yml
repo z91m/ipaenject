@@ -57,8 +57,9 @@ jobs:
 
       - name: 📱 Download and Validate IPA
         run: |
-          echo "⬇️ Downloading IPA..."
-          wget "${{ github.event.inputs.ipa_url }}" --timeout=30 -O original.ipa
+          echo "⬇️ Downloading IPA from Google Drive..."
+          pip install gdown
+          gdown "${{ github.event.inputs.ipa_url }}" -O original.ipa --fuzzy
           
           file_type=$(file --mime-type -b original.ipa)
           if [[ "$file_type" != "application/x-ios-app" && "$file_type" != "application/zip" ]]; then
